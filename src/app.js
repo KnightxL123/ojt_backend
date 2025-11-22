@@ -12,6 +12,127 @@ app.get("/", (req, res) => {
   res.send("API is running...");
 });
 
+app.post("/student/create", async (req, res) => {
+  const { email, password, confirmPassword } = req.body;
+
+  if (!email) {
+    return res.status(400).json({
+      error: "Email is required",
+    });
+  }
+
+  try {
+    const dbResult = await pool.query(
+      "SELECT email FROM students WHERE email = $1",
+      [email]
+    );
+
+    console.log(dbResult);
+    const emailInDb = dbResult.rows[0]?.email || null;
+    const isMatch = !!emailInDb && emailInDb === email;
+
+    //Update Password and Status
+    if (!emailInDb) {
+      console.log("Email not found in students table");
+      return res.status(404).json({
+        error: "Email not found",
+        request: { email },
+      });
+    }
+
+    // if (password !== confirmPassword) {
+    //   return res.status(400).json({
+    //     error: "Passwords do not match",
+    //   });
+    // }
+
+    const updateResult = await pool.query(
+      "UPDATE students SET password = $1, status = $2 WHERE email = $3 RETURNING student_id, email, status",
+      [password, "registered", email]
+    );
+
+    console.log("\n New /student/create request");
+    console.log("Request Email:", email);
+    console.log("DB Email:", emailInDb);
+    console.log("Password:", password);
+    console.log("Confirm Password:", confirmPassword);
+    console.log("Email matches DB:", isMatch);
+    console.log("Update result:", updateResult.rows[0]);
+
+    res.status(201).json({
+      message: "Student registered successfully",
+      request: { email, password, confirmPassword },
+      db: { email: emailInDb },
+      comparison: { isMatch },
+      update: updateResult.rows[0],
+    });
+  } catch (err) {
+    console.error("\n❌ /student/create Email Check Error!");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error(err);
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    res.status(500).json({
+      error: "Database query failed",
+      details: {
+        code: err.code,
+        message: err.message,
+      },
+    });
+  }
+});
+
+app.post("/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  //check email and password from DB
+  if (!email || !password) {
+    return res.status(400).json({
+      error: "Email and password are required",
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT student_id, email, status FROM students WHERE email = $1 AND password = $2",
+      [email, password]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    const student = result.rows[0];
+
+    console.log("\n New /auth/login request");
+    console.log("Email:", email);
+    console.log("Password:", password);
+    console.log("DB Student:", student);
+
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      student,
+    });
+  } catch (err) {
+    console.error("\n❌ /auth/login Route Error!");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error(err);
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    res.status(500).json({
+      error: "Database query failed",
+      details: {
+        code: err.code,
+        message: err.message,
+      },
+    });
+  }
+});
+
 // Get student by student_id (e.g., /student/23-23001)
 app.get("/student/:student_id", async (req, res) => {
   try {
